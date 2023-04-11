@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-
+#include <strings.h>
 #include "types.h"
 #include "list_head.h"
 
