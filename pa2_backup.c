@@ -247,12 +247,14 @@ static struct process *stcf_schedule(void)
 	struct process *next = NULL;
 	struct process *search;
 
-	if(!current || current->status == PROCESS_BLOCKED){
-		goto pick_next;
+	list_for_each_entry(search, &readyqueue, list){
+		if(!current || current->status == PROCESS_BLOCKED || search->lifespan < current->lifespan - current->age){
+			goto pick_next;
+		}
 	}
 
 	if(current->age < current->lifespan){
-		list_add_tail(&current->list, &readyqueue);
+		return current;
 	}
 
 pick_next:
@@ -260,15 +262,20 @@ pick_next:
 	if(!list_empty(&readyqueue)) {
 
 		next = list_first_entry(&readyqueue, struct process, list);
-		
+
 		list_for_each_entry(search, &readyqueue, list){
-			if((search->lifespan - search->age) < (next->lifespan - next->age)){ 
+			if(search->lifespan < (next->lifespan - next->age)){ 
+				next->status = PROCESS_READY;
+				list_add(&next->list, &readyqueue);
 				next = search;
 			}
 		}
+
 		list_del_init(&next->list);
 	}
+
 	return next;
+
 }
 
 struct scheduler stcf_scheduler = {
