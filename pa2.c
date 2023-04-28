@@ -289,39 +289,171 @@ struct scheduler stcf_scheduler = {
 /***********************************************************************
  * Round-robin scheduler
  ***********************************************************************/
+static struct process *rr_schedule(void){
+	struct process *next = NULL;
+
+	if(!current || current->status == PROCESS_BLOCKED){
+		goto pick_next;
+	}
+
+	if(current->age < current->lifespan){
+		list_add_tail(&current->list, &readyqueue);
+	}
+
+pick_next:
+
+	if(!list_empty(&readyqueue)){
+		next = list_first_entry(&readyqueue, struct process, list);
+		list_del_init(&next->list);
+	}
+
+	return next;
+}
+
 struct scheduler rr_scheduler = {
 	.name = "Round-Robin",
 	.acquire = fcfs_acquire, /* Use the default FCFS acquire() */
 	.release = fcfs_release, /* Use the default FCFS release() */
-
+	.initialize = fifo_initialize,
+	.finalize = fifo_finalize,
+	.schedule = rr_schedule,
 	/* Obviously, ... */
 };
 
 /***********************************************************************
  * Priority scheduler
  ***********************************************************************/
+static bool prio_acquire(int resource_id){
+	struct resource* r = resources + resource_id; 
+
+	if(!r->owner){
+		r->owner = current;
+		return true;
+	}
+
+	current->status = PROCESS_BLOCKED;
+	list_add_tail(&current->list, &r->waitqueue);
+
+	return false;
+}
+
+static void prio_release(int resource_id){
+	struct resource *r = resources + resource_id;
+	
+	assert(r->owner == current);
+	r->owner = NULL;
+
+	if(!list_empty(&r->waitqueue)){
+		struct process* waiter = list_first_entry(&r->waitqueue, struct process, list);
+
+		assert(waiter->status == PROCESS_BLOCKED);
+
+		list_del_init(&waiter->list);
+
+		waiter->status = PROCESS_READY;
+
+		list_add_tail(&waiter->list, &readyqueue);
+	}
+}
+
+static struct process *prio_schedule(void){
+	struct process *next = NULL;
+	struct process *search;
+	unsigned int current_prio = 0;
+
+	if(!current || current->status == PROCESS_BLOCKED){
+		goto pick_next;
+	}
+
+	if(current->age < current->lifespan){
+		return current;
+	}
+
+pick_next:
+
+	if(!list_empty(&readyqueue)){
+		next = list_first_entry(&readyqueue, struct process, list);
+		current_prio = next->prio;
+		list_for_each_entry(search, &readyqueue, list){
+			if(current_prio <= search->prio){
+				current_prio = search->prio;
+				next = search;
+			}
+		}
+
+		list_del_init(&next->list);
+	}
+
+	return next;
+}
+
+
 struct scheduler prio_scheduler = {
 	.name = "Priority",
-	/**
-	 * Implement your own acqure/release function to make the priority
-	 * scheduler correct.
-	 */
+	.acquire = prio_acquire,
+	.release = prio_release,
+	.initialize = fifo_initialize,
+	.finalize = fifo_finalize,
+	.schedule = prio_schedule,
 	/* Implement your own prio_schedule() and attach it here */
 };
 
 /***********************************************************************
  * Priority scheduler with aging
  ***********************************************************************/
+static struct process *pa_schedule(void){
+	struct process *next = NULL;
+	struct process *search;
+	unsigned int current_prio = 0;
+
+	if(!current || current->status == PROCESS_BLOCKED){
+		goto pick_next;
+	}
+
+	if(current->age < current->lifespan){
+		list_add_tail(&current->list, &readyqueue);
+	}
+
+pick_next:
+
+	if(!list_empty(&readyqueue)){
+		next = list_first_entry(&readyqueue, struct process, list);
+		current_prio = next->prio;
+		list_for_each_entry(search, &readyqueue, list){
+			if(current_prio <= search->prio){
+				current_prio = search->prio;
+				next = search;
+			}
+		}
+
+		list_for_each_entry(search, &readyqueue, list){
+			if(next != search){
+				search->prio++;
+			}
+		}
+		
+		next->prio = next->prio_orig;
+
+		list_del_init(&next->list);
+	}
+
+	return next;
+}
+
 struct scheduler pa_scheduler = {
 	.name = "Priority + aging",
-	/**
-	 * Ditto
-	 */
+	.acquire = prio_acquire,
+	.release = prio_release,
+	.initialize = fifo_initialize,
+	.finalize = fifo_finalize,
+	.schedule = pa_schedule,
 };
 
 /***********************************************************************
  * Priority scheduler with priority ceiling protocol
  ***********************************************************************/
+
+
 struct scheduler pcp_scheduler = {
 	.name = "Priority + PCP Protocol",
 	/**
