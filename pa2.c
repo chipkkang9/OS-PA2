@@ -20,11 +20,11 @@
 #include "types.h"
 #include "list_head.h"
 
-/**
- * The process which is currently running
- */
+ /**
+  * The process which is currently running
+  */
 #include "process.h"
-extern struct process *current;
+extern struct process* current;
 
 /**
  * List head to hold the processes ready to run
@@ -58,7 +58,7 @@ extern bool quiet;
  ***********************************************************************/
 static bool fcfs_acquire(int resource_id)
 {
-	struct resource *r = resources + resource_id;
+	struct resource* r = resources + resource_id;
 
 	if (!r->owner) {
 		/* This resource is not owned by any one. Take it! */
@@ -93,7 +93,7 @@ static bool fcfs_acquire(int resource_id)
  ***********************************************************************/
 static void fcfs_release(int resource_id)
 {
-	struct resource *r = resources + resource_id;
+	struct resource* r = resources + resource_id;
 
 	/* Ensure that the owner process is releasing the resource */
 	assert(r->owner == current);
@@ -103,7 +103,7 @@ static void fcfs_release(int resource_id)
 
 	/* Let's wake up ONE waiter (if exists) that came first */
 	if (!list_empty(&r->waitqueue)) {
-		struct process *waiter = list_first_entry(&r->waitqueue, struct process, list);
+		struct process* waiter = list_first_entry(&r->waitqueue, struct process, list);
 
 		/**
 		 * Ensure the waiter is in the wait status
@@ -143,9 +143,9 @@ static void fifo_finalize(void)
 {
 }
 
-static struct process *fifo_schedule(void)
+static struct process* fifo_schedule(void)
 {
-	struct process *next = NULL;
+	struct process* next = NULL;
 
 	/* You may inspect the situation by calling dump_status() at any time */
 	// dump_status();
@@ -177,7 +177,7 @@ pick_next:
 		next = list_first_entry(&readyqueue, struct process, list);
 
 		/**
-		 * Detach the process from the ready queue. Note that we use 
+		 * Detach the process from the ready queue. Note that we use
 		 * list_del_init() over list_del() to maintain the list head tidy.
 		 * Otherwise, the framework will complain (assert) on process exit.
 		 */
@@ -200,28 +200,28 @@ struct scheduler fifo_scheduler = {
 /***********************************************************************
  * SJF scheduler
  ***********************************************************************/
-static struct process *sjf_schedule(void)
+static struct process* sjf_schedule(void)
 {
-	struct process *next = NULL;
-	struct process *search;
+	struct process* next = NULL;
+	struct process* search;
 
-	if(!current || current->status == PROCESS_BLOCKED){
+	if (!current || current->status == PROCESS_BLOCKED) {
 		goto pick_next;
 	}
 
-	if(current->age < current->lifespan){
+	if (current->age < current->lifespan) {
 		return current;
 	}
 
 pick_next:
 
 
-	if(!list_empty(&readyqueue)) {
+	if (!list_empty(&readyqueue)) {
 
 		next = list_first_entry(&readyqueue, struct process, list);
 
-		 list_for_each_entry(search, &readyqueue, list)
-		 	if(search->lifespan < next->lifespan)	next = search;
+		list_for_each_entry(search, &readyqueue, list)
+			if (search->lifespan < next->lifespan)	next = search;
 
 		list_del_init(&next->list);
 	}
@@ -242,27 +242,27 @@ struct scheduler sjf_scheduler = {
  * STCF scheduler
  ***********************************************************************/
 
-static struct process *stcf_schedule(void)
+static struct process* stcf_schedule(void)
 {
-	struct process *next = NULL;
-	struct process *search;
+	struct process* next = NULL;
+	struct process* search;
 
-	if(!current || current->status == PROCESS_BLOCKED){
+	if (!current || current->status == PROCESS_BLOCKED) {
 		goto pick_next;
 	}
 
-	if(current->age < current->lifespan){
+	if (current->age < current->lifespan) {
 		list_add_tail(&current->list, &readyqueue);
 	}
 
 pick_next:
 
-	if(!list_empty(&readyqueue)) {
+	if (!list_empty(&readyqueue)) {
 
 		next = list_first_entry(&readyqueue, struct process, list);
-		
-		list_for_each_entry(search, &readyqueue, list){
-			if((search->lifespan - search->age) < (next->lifespan - next->age)){ 
+
+		list_for_each_entry(search, &readyqueue, list) {
+			if ((search->lifespan - search->age) < (next->lifespan - next->age)) {
 				next = search;
 			}
 		}
@@ -283,26 +283,26 @@ struct scheduler stcf_scheduler = {
 	 * Have a look at @forked() callback.
 	 */
 
-	/* Obviously, you should implement stcf_schedule() and attach it here */
+	 /* Obviously, you should implement stcf_schedule() and attach it here */
 };
 
 /***********************************************************************
  * Round-robin scheduler
  ***********************************************************************/
-static struct process *rr_schedule(void){
-	struct process *next = NULL;
+static struct process* rr_schedule(void) {
+	struct process* next = NULL;
 
-	if(!current || current->status == PROCESS_BLOCKED){
+	if (!current || current->status == PROCESS_BLOCKED) {
 		goto pick_next;
 	}
 
-	if(current->age < current->lifespan){
+	if (current->age < current->lifespan) {
 		list_add_tail(&current->list, &readyqueue);
 	}
 
 pick_next:
 
-	if(!list_empty(&readyqueue)){
+	if (!list_empty(&readyqueue)) {
 		next = list_first_entry(&readyqueue, struct process, list);
 		list_del_init(&next->list);
 	}
@@ -323,10 +323,10 @@ struct scheduler rr_scheduler = {
 /***********************************************************************
  * Priority scheduler
  ***********************************************************************/
-static bool prio_acquire(int resource_id){
-	struct resource* r = resources + resource_id; 
+static bool prio_acquire(int resource_id) {
+	struct resource* r = resources + resource_id;
 
-	if(!r->owner){
+	if (!r->owner) {
 		r->owner = current;
 		return true;
 	}
@@ -337,15 +337,24 @@ static bool prio_acquire(int resource_id){
 	return false;
 }
 
-static void prio_release(int resource_id){
-	struct resource *r = resources + resource_id;
-	
+static void prio_release(int resource_id) {
+	struct resource* r = resources + resource_id;
+	struct process* search;
+	unsigned int waiter_prio;
+
 	assert(r->owner == current);
 	r->owner = NULL;
 
-	if(!list_empty(&r->waitqueue)){
+	if (!list_empty(&r->waitqueue)) {
 		struct process* waiter = list_first_entry(&r->waitqueue, struct process, list);
+		waiter_prio = waiter->prio;
 
+		list_for_each_entry(search, &r->waitqueue, list) {
+			if (waiter_prio < search->prio) {
+				waiter = search;
+				waiter_prio = search->prio;
+			}
+		}
 		assert(waiter->status == PROCESS_BLOCKED);
 
 		list_del_init(&waiter->list);
@@ -356,26 +365,26 @@ static void prio_release(int resource_id){
 	}
 }
 
-static struct process *prio_schedule(void){
-	struct process *next = NULL;
-	struct process *search;
+static struct process* prio_schedule(void) {
+	struct process* next = NULL;
+	struct process* search;
 	unsigned int current_prio = 0;
 
-	if(!current || current->status == PROCESS_BLOCKED){
+	if (!current || current->status == PROCESS_BLOCKED) {
 		goto pick_next;
 	}
 
-	if(current->age < current->lifespan){
-		return current;
+	if (current->age < current->lifespan) {
+		list_add_tail(&current->list, &readyqueue);
 	}
 
 pick_next:
 
-	if(!list_empty(&readyqueue)){
+	if (!list_empty(&readyqueue)) {
 		next = list_first_entry(&readyqueue, struct process, list);
 		current_prio = next->prio;
-		list_for_each_entry(search, &readyqueue, list){
-			if(current_prio <= search->prio){
+		list_for_each_entry(search, &readyqueue, list) {
+			if (current_prio < search->prio) {
 				current_prio = search->prio;
 				next = search;
 			}
@@ -401,42 +410,42 @@ struct scheduler prio_scheduler = {
 /***********************************************************************
  * Priority scheduler with aging
  ***********************************************************************/
-static struct process *pa_schedule(void){
-	struct process *next = NULL;
-	struct process *search;
+static struct process* pa_schedule(void) {
+	struct process* next = NULL;
+	struct process* search;
 	unsigned int current_prio = 0;
 
-	if(!current || current->status == PROCESS_BLOCKED){
+	if (!current || current->status == PROCESS_BLOCKED) {
 		goto pick_next;
 	}
 
-	if(current->age < current->lifespan){
+	if (current->age < current->lifespan) {
 		list_add_tail(&current->list, &readyqueue);
 	}
 
 pick_next:
 
-	if(!list_empty(&readyqueue)){
+	if (!list_empty(&readyqueue)) {
 		next = list_first_entry(&readyqueue, struct process, list);
 		current_prio = next->prio;
-		list_for_each_entry(search, &readyqueue, list){
-			if(current_prio <= search->prio){
+		list_for_each_entry(search, &readyqueue, list) {
+			if (current_prio < search->prio) {
 				current_prio = search->prio;
 				next = search;
 			}
 		}
 
-		list_for_each_entry(search, &readyqueue, list){
-			if(next != search){
+		list_for_each_entry(search, &readyqueue, list) {
+			if (next != search) {
 				search->prio++;
 			}
 		}
-		
+
 		next->prio = next->prio_orig;
 
 		list_del_init(&next->list);
 	}
- 
+
 	return next;
 }
 
