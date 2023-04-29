@@ -461,21 +461,180 @@ struct scheduler pa_scheduler = {
 /***********************************************************************
  * Priority scheduler with priority ceiling protocol
  ***********************************************************************/
+static bool pcp_acquire(int resource_id) {
+	struct resource* r = resources + resource_id;
 
+	if (!r->owner) {
+		r->owner = current;
+		r->owner->prio = MAX_PRIO;
+		return true;
+	}
+
+	current->status = PROCESS_BLOCKED;
+	list_add_tail(&current->list, &r->waitqueue);
+
+	return false;
+}
+
+static void pcp_release(int resource_id) {
+	struct resource* r = resources + resource_id;
+	struct process* waiter;
+	struct process* search;
+	unsigned int waiter_prio;
+
+	assert(r->owner == current);
+	
+	current->prio = current->prio_orig;
+	r->owner = NULL;
+
+	if (!list_empty(&r->waitqueue)) {
+		waiter = list_first_entry(&r->waitqueue, struct process, list);
+		waiter_prio = waiter->prio;
+
+		list_for_each_entry(search, &r->waitqueue, list) {
+			if (waiter_prio < search->prio) {
+				waiter = search;
+				waiter_prio = search->prio;
+			}
+		}
+		assert(waiter->status == PROCESS_BLOCKED);
+
+		list_del_init(&waiter->list);
+
+		waiter->status = PROCESS_READY;
+
+		list_add_tail(&waiter->list, &readyqueue);
+	}
+}
+
+static struct process* pcp_schedule(void) {
+	struct process* next = NULL;
+	struct process* search;
+	unsigned int current_prio = 0;
+
+	if (!current || current->status == PROCESS_BLOCKED) {
+		goto pick_next;
+	}
+
+	if (current->age < current->lifespan) {
+		list_add_tail(&current->list, &readyqueue);
+	}
+
+pick_next:
+
+	if (!list_empty(&readyqueue)) {
+		next = list_first_entry(&readyqueue, struct process, list);
+		current_prio = next->prio;
+		list_for_each_entry(search, &readyqueue, list) {
+			if (current_prio < search->prio) {
+				current_prio = search->prio;
+				next = search;
+			}
+		}
+
+		list_del_init(&next->list);
+	}
+
+	return next;
+}
 
 struct scheduler pcp_scheduler = {
 	.name = "Priority + PCP Protocol",
-	/**
-	 * Ditto
-	 */
+	.acquire = pcp_acquire,
+	.release = pcp_release,
+	.initialize = fifo_initialize,
+	.finalize = fifo_finalize,
+	.schedule = pcp_schedule,
 };
 
 /***********************************************************************
  * Priority scheduler with priority inheritance protocol
  ***********************************************************************/
+static bool pip_acquire(int resource_id) {
+	struct resource* r = resources + resource_id;
+
+	if (!r->owner) {
+		r->owner = current;
+		return true;
+	}
+
+	if(r->owner->prio < current->prio){
+		r->owner->prio = current->prio;
+	}
+
+	current->status = PROCESS_BLOCKED;
+	list_add_tail(&current->list, &r->waitqueue);
+
+	return false;
+}
+
+static void pip_release(int resource_id) {
+	struct resource* r = resources + resource_id;
+	struct process* waiter;
+	struct process* search;
+	unsigned int waiter_prio;
+
+	assert(r->owner == current);
+	
+	current->prio = current->prio_orig;
+	r->owner = NULL;
+
+	if (!list_empty(&r->waitqueue)) {
+		waiter = list_first_entry(&r->waitqueue, struct process, list);
+		waiter_prio = waiter->prio;
+
+		list_for_each_entry(search, &r->waitqueue, list) {
+			if (waiter_prio < search->prio) {
+				waiter = search;
+				waiter_prio = search->prio;
+			}
+		}
+		assert(waiter->status == PROCESS_BLOCKED);
+
+		list_del_init(&waiter->list);
+
+		waiter->status = PROCESS_READY;
+
+		list_add_tail(&waiter->list, &readyqueue);
+	}
+}
+
+static struct process* pip_schedule(void) {
+	struct process* next = NULL;
+	struct process* search;
+	unsigned int current_prio = 0;
+
+	if (!current || current->status == PROCESS_BLOCKED) {
+		goto pick_next;
+	}
+
+	if (current->age < current->lifespan) {
+		list_add_tail(&current->list, &readyqueue);
+	}
+
+pick_next:
+
+	if (!list_empty(&readyqueue)) {
+		next = list_first_entry(&readyqueue, struct process, list);
+		current_prio = next->prio;
+		list_for_each_entry(search, &readyqueue, list) {
+			if (current_prio < search->prio) {
+				current_prio = search->prio;
+				next = search;
+			}
+		}
+
+		list_del_init(&next->list);
+	}
+
+	return next;
+}
+
 struct scheduler pip_scheduler = {
 	.name = "Priority + PIP Protocol",
-	/**
-	 * Ditto
-	 */
+	.acquire = pip_acquire,
+	.release = pip_release,
+	.initialize = fifo_initialize,
+	.finalize = fifo_finalize,
+	.schedule = pip_schedule,
 };
